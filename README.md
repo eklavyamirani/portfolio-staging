@@ -57,19 +57,30 @@ same checks without deploying. The base path comes from Pages, so the same
 workflow works unchanged once this moves to the user-site repo, where it serves
 from `/`.
 
-## Promote to the live site
+## Release and promote
 
-**Actions → Promote to github.ekkylab.uk → Run workflow** checks this repo,
-copies it into `eklavyamirani.github.com` on a `promote/staging` branch, and
-opens a pull request against `master`. If a promotion PR is already open, the
-run refreshes it instead. Nothing goes live until you merge that PR.
+The live site only ever gets a tagged release of this repo.
 
-One-time setup:
+1. Cut a release when staging looks right:
 
-1. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new)
-   with access to **only** `eklavyamirani/eklavyamirani.github.com` and these
-   permissions: **Contents: read and write**, **Pull requests: read and write**.
-2. Save it in this repo as the Actions secret `PROMOTE_TOKEN`:
-   `gh secret set PROMOTE_TOKEN -R eklavyamirani/portfolio-staging`
-3. Before merging the first promotion PR, change the user-site repo's
+   ```sh
+   gh release create v0.1.0 --generate-notes
+   ```
+
+2. Within about 6 hours, the **Promote from staging** workflow in
+   `eklavyamirani.github.com` notices the release. It runs the tests and build
+   at that tag, then opens a `promote/<tag>` PR there. To skip the wait, run it
+   by hand:
+
+   ```sh
+   gh workflow run promote.yml -R eklavyamirani/eklavyamirani.github.com           # latest release
+   gh workflow run promote.yml -R eklavyamirani/eklavyamirani.github.com -f tag=v0.1.0
+   ```
+
+3. Review and merge the PR. Before the first merge, change that repo's
    **Settings → Pages → Source** to **GitHub Actions**. The PR includes this as a checklist item.
+
+No tokens or secrets are involved. This repo is public, so the user-site repo
+reads it directly and opens the PR with its own built-in token. Each tag is
+proposed only once: a tag that already has a PR (open or closed), or that is
+already live according to `.promoted-from`, is skipped.
