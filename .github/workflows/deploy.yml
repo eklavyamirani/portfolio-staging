@@ -2,7 +2,7 @@ name: Test and deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, master] # main here; master once promoted to the user-site repo
   pull_request:
   workflow_dispatch:
 

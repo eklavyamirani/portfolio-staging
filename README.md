@@ -56,3 +56,20 @@ deploys to GitHub Pages (`.github/workflows/deploy.yml`). Pull requests run the
 same checks without deploying. The base path comes from Pages, so the same
 workflow works unchanged once this moves to the user-site repo, where it serves
 from `/`.
+
+## Promote to the live site
+
+**Actions → Promote to github.ekkylab.uk → Run workflow** checks this repo,
+copies it into `eklavyamirani.github.com` on a `promote/staging` branch, and
+opens a pull request against `master`. If a promotion PR is already open, the
+run refreshes it instead. Nothing goes live until you merge that PR.
+
+One-time setup:
+
+1. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new)
+   with access to **only** `eklavyamirani/eklavyamirani.github.com` and these
+   permissions: **Contents: read and write**, **Pull requests: read and write**.
+2. Save it in this repo as the Actions secret `PROMOTE_TOKEN`:
+   `gh secret set PROMOTE_TOKEN -R eklavyamirani/portfolio-staging`
+3. Before merging the first promotion PR, change the user-site repo's
+   **Settings → Pages → Source** to **GitHub Actions**. The PR includes this as a checklist item.
