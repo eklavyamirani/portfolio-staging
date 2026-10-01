@@ -1,0 +1,243 @@
+---
+// A working tuner: the same YIN pitch detection that Fingerboard Coach is
+// built on. It plays a synthetic violin until the visitor turns on the mic.
+---
+<figure class="tuner" data-tuner aria-label="Live tuner. Plays a demo, or listens to your microphone if you allow it.">
+  <div class="tuner__head mono">
+    <span class="tuner__note" data-note>A5</span>
+    <span class="tuner__mode" data-mode>demo · synthetic violin</span>
+    <span class="tuner__cents" data-cents>+3¢</span>
+  </div>
+
+  <div class="tuner__plot">
+    <canvas data-canvas aria-hidden="true"></canvas>
+    <svg class="tuner__static" data-static viewBox="0 0 320 160" preserveAspectRatio="none" aria-hidden="true">
+      <rect class="band" x="0" y="64" width="320" height="32" />
+      <line class="zero" x1="0" y1="80" x2="320" y2="80" />
+      <path class="trace" d="M0 132 C20 128 26 104 40 96 S60 70 74 74 92 90 104 84 120 72 134 78 150 86 164 80 182 74 196 79 214 85 228 80 246 76 260 80 278 83 292 80 310 78 320 79" />
+    </svg>
+  </div>
+
+  <figcaption class="tuner__foot mono">
+    <button type="button" class="tuner__mic" data-mic hidden>Play or sing a note</button>
+    <span class="tuner__legend">in tune ±10¢</span>
+  </figcaption>
+  <p class="tuner__privacy" data-privacy hidden>Audio is processed in your browser and never uploaded.</p>
+</figure>
+
+<style>
+  .tuner {
+    margin: 0; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: 0 30px 80px -40px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .tuner__head, .tuner__foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); }
+  .tuner__head { margin-bottom: 12px; }
+  .tuner__note { color: var(--text); font-size: 1.15rem; font-weight: 500; min-width: 3ch; }
+  .tuner__mode { font-size: 0.7rem; text-align: center; }
+  .tuner__cents { font-size: 1rem; min-width: 5ch; text-align: right; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .tuner__cents[data-in-tune] { color: var(--good); }
+  .tuner__plot { position: relative; height: 160px; }
+  .tuner__plot canvas, .tuner__plot svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .tuner__static .band { fill: color-mix(in srgb, var(--good) 12%, transparent); }
+  .tuner__static .zero { stroke: color-mix(in srgb, var(--good) 55%, transparent); stroke-dasharray: 3 5; }
+  .tuner__static .trace { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; }
+  .tuner__foot { margin-top: 14px; font-size: 0.72rem; }
+  .tuner__mic {
+    font: inherit; font-size: 0.78rem; color: var(--text); cursor: pointer;
+    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent;
+  }
+  .tuner__mic:hover { border-color: var(--accent); }
+  .tuner__mic[aria-pressed='true'] { border-color: var(--good); color: var(--good); }
+  .tuner__privacy { margin-top: 10px; font-size: 0.75rem; color: var(--muted); }
+</style>
+
+<script>
+  import { detectPitch, noteFromFrequency } from '../lib/pitch';
+  import { demoFrame } from '../lib/demo-violin';
+
+  const FRAME = 2048;
+  const DEMO_RATE = 48000;
+  const HISTORY = 120; // samples on screen, about 4 s at 30 fps
+  const STEP_MS = 1000 / 30;
+  const RANGE = 50; // cents shown above and below the line
+  const IN_TUNE = 10;
+
+  const root = document.querySelector<HTMLElement>('[data-tuner]')!;
+  const canvas = root.querySelector<HTMLCanvasElement>('[data-canvas]')!;
+  const ctx2d = canvas.getContext('2d')!;
+  const noteEl = root.querySelector<HTMLElement>('[data-note]')!;
+  const centsEl = root.querySelector<HTMLElement>('[data-cents]')!;
+  const modeEl = root.querySelector<HTMLElement>('[data-mode]')!;
+  const micBtn = root.querySelector<HTMLButtonElement>('[data-mic]')!;
+  const privacy = root.querySelector<HTMLElement>('[data-privacy]')!;
+
+  root.querySelector('[data-static]')!.remove();
+  const micSupported = Boolean(navigator.mediaDevices?.getUserMedia);
+  micBtn.hidden = !micSupported;
+
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const history: (number | null)[] = [];
+  const recent: number[] = [];
+  let mode: 'demo' | 'mic' = 'demo';
+  let demoTime = 0;
+  let lastFrame = 0;
+  let lastText = 0;
+  let lastHeard = 0;
+  let running = false;
+  let visible = true;
+  let audio: { ctx: AudioContext; stream: MediaStream; analyser: AnalyserNode; buf: Float32Array<ArrayBuffer> } | null = null;
+
+  let colors = readColors();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { colors = readColors(); draw(); });
+
+  function readColors() {
+    const s = getComputedStyle(root);
+    return { accent: s.getPropertyValue('--accent').trim(), good: s.getPropertyValue('--good').trim() };
+  }
+
+  function sample(): number | null {
+    let pitch;
+    if (mode === 'mic' && audio) {
+      audio.analyser.getFloatTimeDomainData(audio.buf);
+      pitch = detectPitch(audio.buf, audio.ctx.sampleRate, { minRms: 0.008 });
+    } else {
+      demoTime += STEP_MS / 1000;
+      pitch = detectPitch(demoFrame(demoTime, DEMO_RATE, FRAME).samples, DEMO_RATE);
+    }
+    if (!pitch) return null;
+    const note = noteFromFrequency(pitch.freq);
+    noteEl.dataset.pending = `${note.name}${note.octave}`;
+    return note.cents;
+  }
+
+  function push(cents: number | null, now: number) {
+    history.push(cents);
+    if (history.length > HISTORY) history.shift();
+    if (cents !== null) {
+      lastHeard = now;
+      recent.push(cents);
+      if (recent.length > 5) recent.shift();
+    }
+    if (now - lastText < 120) return;
+    lastText = now;
+    if (now - lastHeard > 600) {
+      noteEl.textContent = '–';
+      centsEl.textContent = '';
+      recent.length = 0;
+      return;
+    }
+    const sorted = [...recent].sort((a, b) => a - b);
+    const median = Math.round(sorted[Math.floor(sorted.length / 2)]);
+    noteEl.textContent = noteEl.dataset.pending ?? '–';
+    centsEl.textContent = `${median > 0 ? '+' : median < 0 ? '−' : '±'}${Math.abs(median)}¢`;
+    centsEl.toggleAttribute('data-in-tune', Math.abs(median) <= IN_TUNE);
+  }
+
+  function draw() {
+    const dpr = devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+    ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx2d.clearRect(0, 0, w, h);
+
+    const mid = h / 2;
+    const scale = (h / 2 - 6) / RANGE;
+    const y = (c: number) => mid - Math.max(-RANGE, Math.min(RANGE, c)) * scale;
+
+    ctx2d.fillStyle = ctx2d.strokeStyle = colors.good;
+    ctx2d.globalAlpha = 0.12;
+    ctx2d.fillRect(0, y(IN_TUNE), w, y(-IN_TUNE) - y(IN_TUNE));
+    ctx2d.globalAlpha = 0.55;
+    ctx2d.setLineDash([3, 5]);
+    ctx2d.lineWidth = 1;
+    ctx2d.beginPath(); ctx2d.moveTo(0, mid); ctx2d.lineTo(w, mid); ctx2d.stroke();
+    ctx2d.setLineDash([]);
+    ctx2d.globalAlpha = 1;
+
+    ctx2d.strokeStyle = colors.accent;
+    ctx2d.lineWidth = 2.5;
+    ctx2d.lineCap = ctx2d.lineJoin = 'round';
+    ctx2d.beginPath();
+    const dx = w / (HISTORY - 1);
+    const offset = HISTORY - history.length;
+    let pen = false;
+    history.forEach((c, i) => {
+      if (c === null) { pen = false; return; }
+      const x = (offset + i) * dx;
+      if (pen) ctx2d.lineTo(x, y(c)); else ctx2d.moveTo(x, y(c));
+      pen = true;
+    });
+    ctx2d.stroke();
+  }
+
+  function loop(now: number) {
+    if (!running) return;
+    if (now - lastFrame >= STEP_MS) {
+      lastFrame = now;
+      push(sample(), now);
+      draw();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function updateRunning() {
+    const shouldRun = visible && !document.hidden && (mode === 'mic' || !reducedMotion.matches);
+    if (shouldRun && !running) { running = true; requestAnimationFrame(loop); }
+    else if (!shouldRun) running = false;
+  }
+
+  /** Static picture for reduced motion: run the demo offline and draw once. */
+  function renderStill() {
+    history.length = 0;
+    demoTime = 0.4;
+    for (let i = 0; i < HISTORY; i++) push(sample(), i * STEP_MS);
+    draw();
+  }
+
+  async function startMic() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
+      const ctx = new AudioContext();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = FRAME;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      audio = { ctx, stream, analyser, buf: new Float32Array(FRAME) };
+      mode = 'mic';
+      history.length = 0;
+      modeEl.textContent = 'listening · your microphone';
+      micBtn.textContent = 'Stop listening';
+      micBtn.setAttribute('aria-pressed', 'true');
+      privacy.hidden = false;
+    } catch {
+      modeEl.textContent = 'mic unavailable · demo';
+    }
+    updateRunning();
+  }
+
+  function stopMic() {
+    audio?.stream.getTracks().forEach((t) => t.stop());
+    audio?.ctx.close();
+    audio = null;
+    mode = 'demo';
+    history.length = 0;
+    modeEl.textContent = 'demo · synthetic violin';
+    micBtn.textContent = 'Play or sing a note';
+    micBtn.setAttribute('aria-pressed', 'false');
+    privacy.hidden = true;
+    if (reducedMotion.matches) renderStill();
+    updateRunning();
+  }
+
+  micBtn.setAttribute('aria-pressed', 'false');
+  micBtn.addEventListener('click', () => (mode === 'mic' ? stopMic() : startMic()));
+  new IntersectionObserver(([e]) => { visible = e.isIntersecting; updateRunning(); }).observe(root);
+  document.addEventListener('visibilitychange', updateRunning);
+  reducedMotion.addEventListener('change', () => { if (reducedMotion.matches && mode === 'demo') renderStill(); updateRunning(); });
+  new ResizeObserver(draw).observe(canvas);
+
+  if (reducedMotion.matches) renderStill();
+  updateRunning();
+</script>

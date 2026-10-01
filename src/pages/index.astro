@@ -1,0 +1,162 @@
+---
+import { existsSync } from 'node:fs';
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import LiveTuner from '../components/LiveTuner.astro';
+import { SITE } from '../config';
+
+const byOrder = (a: { data: { order: number } }, b: { data: { order: number } }) => a.data.order - b.data.order;
+const projects = (await getCollection('projects')).sort(byOrder);
+const lab = (await getCollection('lab')).sort(byOrder);
+const music = (await getCollection('music')).sort(byOrder);
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const resumeUrl = existsSync(`public/${SITE.resumeFile}`) ? `${base}${SITE.resumeFile}` : null;
+const github = `https://github.com/${SITE.github}`;
+const pad = (n: number) => String(n).padStart(2, '0');
+---
+<Base>
+  <section class="hero">
+    <div class="wrap hero__grid">
+      <div>
+        <p class="eyebrow mono">Software Engineer · {SITE.location}</p>
+        <h1>{SITE.title}</h1>
+        <p class="lead">
+          I build software that listens, measures and explains. That ranges from
+          pitch detection in the browser and FreeRTOS firmware to the tools
+          engineers use to review each other's code.
+        </p>
+        <div class="cta">
+          <a class="btn btn--primary" href="#work">Selected work</a>
+          {resumeUrl && <a class="btn" href={resumeUrl}>Resume</a>}
+          <a class="btn" href={github}>GitHub ↗</a>
+        </div>
+      </div>
+      <LiveTuner />
+    </div>
+  </section>
+
+  <section class="section" id="work">
+    <div class="wrap">
+      <header class="section__head">
+        <p class="eyebrow mono">01 / Selected work</p>
+        <h2>Systems with a measurable outcome.</h2>
+      </header>
+      <div class="projects">
+        {projects.map(({ data: p }, i) => (
+          <article class:list={['project', { 'project--lead': i === 0 }]}>
+            <div class="project__meta mono">
+              <span>{pad(i + 1)}</span>
+              <span class="project__links">
+                {p.live && <a href={p.live}>Live ↗</a>}
+                <a href={p.repo}>Source ↗</a>
+              </span>
+            </div>
+            <h3>{p.name}</h3>
+            <p class="project__tagline">{p.tagline}</p>
+            <p>{p.summary}</p>
+            {p.points.length > 0 && (
+              <ul class="points">{p.points.map((pt) => <li>{pt}</li>)}</ul>
+            )}
+            <ul class="chips mono" aria-label="Stack">{p.stack.map((s) => <li>{s}</li>)}</ul>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="approach">
+    <div class="wrap">
+      <header class="section__head">
+        <p class="eyebrow mono">02 / How I work</p>
+        <h2>Principles behind the work.</h2>
+      </header>
+      <ol class="principles">
+        <li>
+          <h3>Measure the thing that matters</h3>
+          <p>Fingerboard Coach doesn't say "a bit sharp". It reports +12¢ and how far to move the finger. Vague feedback doesn't change anything, for people or for systems.</p>
+        </li>
+        <li>
+          <h3>Design for the person on the other end</h3>
+          <p>Players, people learning a dance, the engineer reviewing someone else's diff. Each tool here starts from how its user actually works.</p>
+        </li>
+        <li>
+          <h3>Scale judgment, not just output</h3>
+          <p>Generated code arrives faster than anyone can review it. pr-review spends effort on the reviewer's attention, which is the real bottleneck.</p>
+        </li>
+        <li>
+          <h3>Leave it runnable</h3>
+          <p>One command to start, thresholds kept in one config file, and decisions written down where the next engineer will look.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="music">
+    <div class="wrap">
+      <header class="section__head">
+        <p class="eyebrow mono">03 / Music</p>
+        <h2>Violin &amp; guitar.</h2>
+        <p class="section__sub">Recordings from the practice room. The violin work is also where Fingerboard Coach came from.</p>
+      </header>
+      {music.length > 0 ? (
+        <div class="recordings">
+          {music.map(({ data: r }) => (
+            <article class="recording">
+              {r.youtube && (
+                <div class="recording__media">
+                  <iframe src={`https://www.youtube-nocookie.com/embed/${r.youtube}`} title={r.title} loading="lazy" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                </div>
+              )}
+              {r.audio && <audio controls preload="none" src={`${base}${r.audio.replace(/^\//, '')}`}></audio>}
+              <div class="recording__body">
+                <p class="mono recording__meta">{r.instrument[0].toUpperCase() + r.instrument.slice(1)}{r.date && ` · ${r.date}`}</p>
+                <h3>{r.title}</h3>
+                {r.note && <p>{r.note}</p>}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div class="empty">
+          <p class="mono">Recordings coming soon.</p>
+          <p>Until then, try the <a href="/violin-practice-system/">practice tool</a> I use every day, or play a note into the tuner at the top of this page.</p>
+        </div>
+      )}
+    </div>
+  </section>
+
+  <section class="section section--alt" id="lab">
+    <div class="wrap">
+      <header class="section__head">
+        <p class="eyebrow mono">04 / Lab</p>
+        <h2>Smaller builds and experiments.</h2>
+      </header>
+      <ul class="lab">
+        {lab.map(({ data: l }) => (
+          <li>
+            <a href={l.repo}><span class="lab__name mono">{l.name}</span></a>
+            <span class="lab__note">{l.note}</span>
+            <span class="lab__lang mono">{l.lang}</span>
+          </li>
+        ))}
+      </ul>
+      <p class="more"><a class="mono" href={`${github}?tab=repositories`}>All repositories ↗</a></p>
+    </div>
+  </section>
+
+  <section class="section" id="contact">
+    <div class="wrap contact">
+      <div>
+        <p class="eyebrow mono">05 / Contact</p>
+        <h2>Have a hard problem? Let's talk.</h2>
+      </div>
+      <div class="contact__links">
+        <a class="btn btn--primary" href={`mailto:${SITE.email}`}>Email</a>
+        {resumeUrl && <a class="btn" href={resumeUrl}>Resume (PDF)</a>}
+        <a class="btn" href={github}>GitHub ↗</a>
+        {SITE.linkedin && <a class="btn" href={`https://www.linkedin.com/in/${SITE.linkedin}`}>LinkedIn ↗</a>}
+      </div>
+    </div>
+  </section>
+</Base>

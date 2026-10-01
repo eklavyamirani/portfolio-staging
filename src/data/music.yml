@@ -1,0 +1,17 @@
+# Recordings. Each entry needs an id, a title, an instrument (violin or guitar),
+# and either a YouTube video id or an audio file in public/media/.
+#
+# - id: meditation
+#   title: Meditation from Thaïs
+#   instrument: violin
+#   youtube: dQw4w9WgXcQ          # the part after watch?v=
+#   date: 2026-09
+#   note: First full run-through with accompaniment.
+#
+# - id: em-study
+#   title: Fingerstyle study in E minor
+#   instrument: guitar
+#   audio: media/em-study.mp3   # file in public/media/
+#   date: 2026-08
+
+[]
