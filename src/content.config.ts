@@ -34,6 +34,7 @@ const lab = defineCollection({
     note: z.string(),
     lang: z.string(),
     repo: z.url(),
+    live: z.string().optional(),
   }),
 });
 

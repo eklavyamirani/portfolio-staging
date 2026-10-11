@@ -135,7 +135,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
       <ul class="lab">
         {lab.map(({ data: l }) => (
           <li>
-            <a href={l.repo}><span class="lab__name mono">{l.name}</span></a>
+            <a href={l.live ?? l.repo}><span class="lab__name mono">{l.name}</span></a>
             <span class="lab__note">{l.note}</span>
             <span class="lab__lang mono">{l.lang}</span>
           </li>

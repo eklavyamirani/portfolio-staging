@@ -1,5 +1,12 @@
 # Smaller builds, shown as a compact list.
-# Fields: id, name, note, lang, repo
+# Fields: id, name, note, lang, repo, live (optional; the name links here instead of the repo)
+
+- id: design-canvas
+  name: design-canvas
+  note: A whiteboard for sketching diagrams, built on Excalidraw. Drawings stay in the browser.
+  lang: TypeScript
+  repo: https://github.com/eklavyamirani/design-canvas
+  live: /design-canvas/
 
 - id: stt-keyboard
   name: stt-keyboard
